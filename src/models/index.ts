@@ -3,6 +3,9 @@ import { ExportJobModel } from './export-job.model';
 import { SessionModel } from './session.model';
 import { PaymentModel } from './payment.model';
 import { ReviewModel } from './review.model';
+import { WalletModel } from './wallet.model';
+import { PayoutRequestModel } from './payout-request.model';
+import { WalletEventModel } from './wallet-event.model';
 
 export const initializeModels = async () => {
   try {
@@ -11,6 +14,9 @@ export const initializeModels = async () => {
     await SessionModel.initializeTable();
     await PaymentModel.initializeTable();
     await ReviewModel.initializeTable();
+    await WalletModel.initializeTable();
+    await PayoutRequestModel.initializeTable();
+    await WalletEventModel.initializeTable();
     console.log('✅ All database tables initialized');
   } catch (error) {
     console.error('❌ Database initialization failed:', error);

@@ -125,6 +125,68 @@ export async function initializeTestDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_sessions_scheduled_at ON sessions(scheduled_at);
     `);
 
+    // Create wallet tables
+    await testPool.query(`
+      CREATE TABLE IF NOT EXISTS wallets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL UNIQUE REFERENCES users(id),
+        stellar_public_key VARCHAR(56) NOT NULL UNIQUE,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        
+        CONSTRAINT wallets_status_check CHECK (status IN ('active', 'inactive', 'suspended')),
+        CONSTRAINT wallets_stellar_key_format CHECK (stellar_public_key ~ '^G[A-Z2-7]{55}$')
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_wallets_user_id ON wallets(user_id);
+      CREATE INDEX IF NOT EXISTS idx_wallets_stellar_key ON wallets(stellar_public_key);
+      CREATE INDEX IF NOT EXISTS idx_wallets_status ON wallets(status);
+    `);
+
+    // Create payout_requests table
+    await testPool.query(`
+      CREATE TABLE IF NOT EXISTS payout_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        amount DECIMAL(20, 7) NOT NULL,
+        asset_code VARCHAR(12) NOT NULL DEFAULT 'XLM',
+        asset_issuer VARCHAR(56),
+        destination_address VARCHAR(56) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        memo VARCHAR(28),
+        requested_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        processed_at TIMESTAMP WITH TIME ZONE,
+        transaction_hash VARCHAR(64),
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_user_id ON payout_requests(user_id);
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_status ON payout_requests(status);
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_requested_at ON payout_requests(requested_at);
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_transaction_hash ON payout_requests(transaction_hash);
+    `);
+
+    // Create wallet_events table
+    await testPool.query(`
+      CREATE TABLE IF NOT EXISTS wallet_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        event_type VARCHAR(50) NOT NULL,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_wallet_events_user_id ON wallet_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_wallet_events_event_type ON wallet_events(event_type);
+      CREATE INDEX IF NOT EXISTS idx_wallet_events_created_at ON wallet_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_wallet_events_user_type ON wallet_events(user_id, event_type);
+    `);
+
     console.log('✅ Test database initialized successfully');
   } catch (error) {
     console.error('❌ Failed to initialize test database:', error);
@@ -138,6 +200,9 @@ export async function initializeTestDatabase(): Promise<void> {
 export async function truncateAllTables(): Promise<void> {
   try {
     await testPool.query(`
+      TRUNCATE TABLE wallet_events CASCADE;
+      TRUNCATE TABLE payout_requests CASCADE;
+      TRUNCATE TABLE wallets CASCADE;
       TRUNCATE TABLE sessions CASCADE;
       TRUNCATE TABLE disputes CASCADE;
       TRUNCATE TABLE transactions CASCADE;
