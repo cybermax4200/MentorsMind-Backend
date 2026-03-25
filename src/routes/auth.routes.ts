@@ -1,11 +1,6 @@
 import { Router } from 'express';
 import { ResponseUtil } from '../utils/response.utils';
 import { authLimiter } from '../middleware/rate-limit.middleware';
-import { handleTokenRefresh } from '../middleware/token-refresh.middleware';
-import { authenticate } from '../middleware/auth.middleware';
-import { TokenService } from '../services/token.service';
-import { JwtUtils } from '../utils/jwt.utils';
-import { AuthenticatedRequest } from '../types/api.types';
 
 const router = Router();
 
@@ -127,7 +122,9 @@ router.post('/login', (_req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/refresh', handleTokenRefresh);
+router.post('/refresh', (_req, res) => {
+  ResponseUtil.success(res, null, 'Token refresh endpoint - to be implemented');
+});
 
 /**
  * @swagger
@@ -137,12 +134,6 @@ router.post('/refresh', handleTokenRefresh);
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RefreshTokenRequest'
  *     responses:
  *       200:
  *         description: Logged out successfully
@@ -157,28 +148,8 @@ router.post('/refresh', handleTokenRefresh);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/logout', authenticate, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { refreshToken } = req.body;
-    const authHeader = req.headers.authorization;
-
-    if (authHeader) {
-      const accessToken = authHeader.substring(7);
-      const decoded = JwtUtils.verifyAccessToken(accessToken);
-      // Blacklist the access token until its natural expiration
-      await TokenService.blacklistToken(decoded.jti, decoded.exp);
-    }
-
-    if (refreshToken) {
-      // Revoke the refresh token from DB
-      await TokenService.revokeRefreshToken(refreshToken);
-    }
-
-    ResponseUtil.success(res, null, 'Logged out successfully');
-  } catch {
-    // Even if something fails (like invalid token), we want to return success or generic message
-    ResponseUtil.success(res, null, 'Logged out successfully');
-  }
+router.post('/logout', (_req, res) => {
+  ResponseUtil.success(res, null, 'Logout endpoint - to be implemented');
 });
 
 /**

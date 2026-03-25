@@ -6,20 +6,13 @@ import exportRoutes from './export.routes';
 import adminRoutes from './admin.routes';
 import bookingsRoutes from './bookings.routes';
 import timezoneRoutes from './timezone.routes';
-import walletsRoutes from './wallets.routes';
 import { AdminService } from '../services/admin.service';
-import { BookingsService } from '../services/bookings.service';
 
 const router = Router();
 
 // Initialize admin tables (async, don't block)
 AdminService.initialize().catch((err) => {
   console.error('Failed to initialize admin tables:', err);
-});
-
-// Initialize bookings tables (async, don't block)
-BookingsService.initialize().catch(err => {
-  console.error('Failed to initialize bookings tables:', err);
 });
 
 // Mount route modules
@@ -29,7 +22,6 @@ router.use('/', exportRoutes);
 router.use('/admin', adminRoutes);
 router.use('/bookings', bookingsRoutes);
 router.use('/timezones', timezoneRoutes);
-router.use('/wallets', walletsRoutes);
 
 /**
  * @swagger
@@ -91,18 +83,7 @@ router.get('/', (_req, res) => {
  *                         environment: { type: string, example: production }
  *                         version: { type: string, example: v1 }
  */
-router.get('/health', (_req, res) => {
-  ResponseUtil.success(
-    res,
-    {
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
-      version: process.env.API_VERSION || 'v1',
-    },
-    'Service is healthy',
-  );
-});
+router.get('/health', asyncHandler(HealthController.getHealth));
 
 /**
  * @swagger
@@ -132,20 +113,10 @@ router.get('/health', (_req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/ready', async (_req, res) => {
-  // Add checks for database, external services, etc.
-  const checks = {
-    database: true, // TODO: Add actual database check
-    stellar: true, // TODO: Add Stellar network check
-  };
-
-  const isReady = Object.values(checks).every((check) => check === true);
-
-  if (isReady) {
-    ResponseUtil.success(res, checks, 'Service is ready');
-  } else {
-    ResponseUtil.error(res, 'Service is not ready', 503);
-  }
-});
+router.get('/ready', asyncHandler(async (req, res) => {
+  const health = await HealthService.checkHealth();
+  const isReady = health.overall === 'healthy';
+  ResponseUtil.success(res, { ...health, isReady }, isReady ? 'Service is ready' : 'Service degraded', isReady ? 200 : 503);
+}));
 
 export default router;
