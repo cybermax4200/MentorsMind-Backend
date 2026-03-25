@@ -170,6 +170,9 @@ export async function initializeTestDatabase(): Promise<void> {
 export async function truncateAllTables(): Promise<void> {
   try {
     await testPool.query(`
+      TRUNCATE TABLE wallet_events CASCADE;
+      TRUNCATE TABLE payout_requests CASCADE;
+      TRUNCATE TABLE wallets CASCADE;
       TRUNCATE TABLE sessions CASCADE;
       TRUNCATE TABLE disputes CASCADE;
       TRUNCATE TABLE transactions CASCADE;
