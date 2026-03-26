@@ -1,7 +1,10 @@
 import { BookingModel, BookingRecord } from '../models/booking.model';
 import { TransactionModel } from '../models/transaction.model';
 import { UsersService } from './users.service';
+import { CacheService } from './cache.service';
+import { CacheKeys, CacheTTL } from '../utils/cache-key.utils';
 import { stellarService } from './stellar.service';
+import { logger } from '../utils/logger.utils';
 import { createError } from '../middleware/errorHandler';
 import { calculateEndTime, calculateRefundEligibility } from '../utils/booking-conflicts.utils';
 import { SocketService } from './socket.service';
@@ -97,7 +100,22 @@ export const BookingsService = {
     userId: string,
     filters?: { status?: string; page?: number; limit?: number }
   ): Promise<{ bookings: BookingRecord[]; total: number }> {
-    return await BookingModel.findByUserId(userId, filters);
+    const cacheKey = CacheKeys.sessionList(userId);
+    
+    // Try to get from cache first
+    const cached = await CacheService.get<{ bookings: BookingRecord[]; total: number }>(cacheKey);
+    if (cached !== null) {
+      logger.debug('bookings.getUserBookings cache hit', { userId });
+      return cached;
+    }
+
+    // Not in cache, fetch from database
+    const result = await BookingModel.findByUserId(userId, filters);
+    
+    // Cache the result for 30 seconds
+    await CacheService.set(cacheKey, result, CacheTTL.veryShort);
+
+    return result;
   },
 
   async updateBooking(
@@ -145,6 +163,11 @@ export const BookingsService = {
       throw createError('Failed to update booking', 500);
     }
 
+    // Invalidate session list cache for both mentee and mentor
+    await CacheService.del(CacheKeys.sessionList(booking.mentee_id));
+    await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
+    logger.debug('Booking cache invalidated on update', { bookingId });
+
     return updated;
   },
 
@@ -170,6 +193,10 @@ export const BookingsService = {
       throw createError('Failed to confirm booking', 500);
     }
 
+    // Invalidate session list cache for both users
+    await CacheService.del(CacheKeys.sessionList(booking.mentee_id));
+    await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
+    logger.debug('Booking cache invalidated on confirmation', { bookingId });
     // Emit session:updated event to both mentor and mentee
     SocketService.emitToUser(booking.mentor_id, 'session:updated', {
       bookingId,
@@ -209,6 +236,10 @@ export const BookingsService = {
       throw createError('Failed to complete booking', 500);
     }
 
+    // Invalidate session list cache for both users
+    await CacheService.del(CacheKeys.sessionList(booking.mentee_id));
+    await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
+    logger.debug('Booking cache invalidated on completion', { bookingId });
     // Emit session:updated event to both mentor and mentee
     SocketService.emitToUser(booking.mentor_id, 'session:updated', {
       bookingId,
@@ -247,6 +278,11 @@ export const BookingsService = {
     if (!updated) {
       throw createError('Failed to cancel booking', 500);
     }
+
+    // Invalidate session list cache for both users
+    await CacheService.del(CacheKeys.sessionList(booking.mentee_id));
+    await CacheService.del(CacheKeys.sessionList(booking.mentor_id));
+    logger.debug('Booking cache invalidated on cancellation', { bookingId });
 
     // TODO: Process refund via Stellar if eligible
 

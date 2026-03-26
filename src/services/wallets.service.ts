@@ -3,6 +3,8 @@ import { PayoutRequestModel, type PayoutRequest } from '../models/payout-request
 import { WalletEventModel, type WalletEvent } from '../models/wallet-event.model';
 import { PaymentModel } from '../models/payment.model';
 import { stellarService } from './stellar.service';
+import { CacheService } from './cache.service';
+import { CacheKeys, CacheTTL } from '../utils/cache-key.utils';
 import { logger } from '../utils/logger.utils';
 import type { StellarBalance } from '../types/stellar.types';
 
@@ -371,6 +373,7 @@ export const WalletsService = {
 
   /**
    * Check if user has a trustline for a specific asset
+   * Uses cached balance lookup to reduce Horizon API calls
    * @param userId - User ID
    * @param assetCode - Asset code
    * @param assetIssuer - Asset issuer

@@ -24,6 +24,7 @@ export interface MonitoringConfig {
     trackRequests: boolean;
     trackDatabase: boolean;
     trackRedis: boolean;
+    trackCache: boolean;
     trackStellar: boolean;
     /** Custom labels for metrics */
     labels: Record<string, string>;
@@ -52,6 +53,7 @@ export const monitoringConfig: MonitoringConfig = {
     trackRequests: true,
     trackDatabase: true,
     trackRedis: true,
+    trackCache: true,
     trackStellar: true,
     labels: {
       app: 'mentorminds',
