@@ -41,9 +41,13 @@ const server = app.listen(PORT, () => {
 // Attach WebSocket server to the same HTTP server
 initWebSocketServer(server);
 
+// Subscribe to Stellar Horizon SSE for real-time payment confirmations
+startStellarStream();
+
 // Graceful shutdown
 async function shutdown(signal: string) {
   console.log(`${signal} signal received: closing HTTP server`);
+  stopStellarStream();
   await Promise.all([
     emailWorker.close(),
     paymentWorker.close(),
