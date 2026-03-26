@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run build
+      - name: Unit & Integration tests + coverage
+        run: npm run test -- --runInBand --coverage
+      - name: Security scan
+        run: npm audit --audit-level=high
+      - id: coverage
+        name: Parse coverage summary
+        run: |
+          node - <<'NODE'
+          const c = require('./coverage/coverage-summary.json').total;
+          console.log(`lines=${c.lines.pct.toFixed(2)}`);
+          console.log(`statements=${c.statements.pct.toFixed(2)}`);
+          console.log(`functions=${c.functions.pct.toFixed(2)}`);
+          console.log(`branches=${c.branches.pct.toFixed(2)}`);
+          NODE
+        shell: bash
+      - name: Comment coverage report on PR
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## 📊 Test Coverage Summary
+            - Lines: `$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct.toFixed(2))")`%
+            - Statements: `$(node -e "console.log(require('./coverage/coverage-summary.json').total.statements.pct.toFixed(2))")`%
+            - Functions: `$(node -e "console.log(require('./coverage/coverage-summary.json').total.functions.pct.toFixed(2))")`% 
+            - Branches: `$(node -e "console.log(require('./coverage/coverage-summary.json').total.branches.pct.toFixed(2))")`%
+            - Threshold: 70% (set in jest.config.ts)
+
+  upload-artifacts:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
