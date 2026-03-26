@@ -2,7 +2,7 @@ import type { Config } from 'jest';
 
 /**
  * Jest config for unit tests that don't require a database connection.
- * Used for queue and worker tests.
+ * Used for queue, worker, logging, database, and env config unit tests.
  */
 const config: Config = {
   preset: 'ts-jest',
@@ -17,6 +17,11 @@ const config: Config = {
     '**/utils/__tests__/logger.test.ts',
     '**/middleware/__tests__/correlation-id.middleware.test.ts',
     '**/middleware/__tests__/request-logger.middleware.test.ts',
+    // Database unit tests (no live DB — all mocked)
+    '**/utils/__tests__/database.utils.test.ts',
+    '**/services/__tests__/database.service.test.ts',
+    // Environment config unit tests
+    '**/config/__tests__/env.test.ts',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   transform: {
