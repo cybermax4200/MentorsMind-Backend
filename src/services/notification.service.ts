@@ -2,6 +2,7 @@ import { NotificationsModel, NotificationInput, NotificationType, NotificationCh
 import { NotificationPreferencesModel } from '../models/notification-preferences.model';
 import { NotificationDeliveryTrackingModel, DeliveryStatus } from '../models/notification-delivery-tracking.model';
 import { NotificationAnalyticsModel } from '../models/notification-analytics.model';
+import { logger } from '../utils/logger';
 
 export interface NotificationRecord {
   id: string;
@@ -176,7 +177,7 @@ export const NotificationService = {
    */
   async sendEmail(notification: EmailNotification): Promise<boolean> {
     // TODO: Integrate with actual email service (SendGrid, SES, etc.)
-    console.log('📧 Sending email:', {
+    logger.info('Sending email', {
       to: notification.to,
       subject: notification.subject,
       preview: notification.body.substring(0, 100),
@@ -198,7 +199,7 @@ export const NotificationService = {
 
       return true;
     } catch (error) {
-      console.error('Failed to send email:', error);
+      logger.error('Failed to send email', { error });
       return false;
     }
   },
@@ -397,7 +398,7 @@ The MentorMinds Team
     try {
       await NotificationAnalyticsModel.incrementMetric(today, type, channel, metric);
     } catch (error) {
-      console.error('Failed to update notification analytics:', error);
+      logger.error('Failed to update notification analytics', { error });
     }
   },
 
@@ -422,7 +423,7 @@ The MentorMinds Team
         deliveryHistory,
       };
     } catch (error) {
-      console.error('Failed to get notification status:', error);
+      logger.error('Failed to get notification status', { error });
       return null;
     }
   },
@@ -443,7 +444,7 @@ The MentorMinds Team
 
       return null;
     } catch (error) {
-      console.error('Failed to schedule notification:', error);
+      logger.error('Failed to schedule notification', { error });
       return null;
     }
   },
@@ -455,7 +456,7 @@ The MentorMinds Team
     try {
       return await NotificationsModel.delete(notificationId);
     } catch (error) {
-      console.error('Failed to cancel scheduled notification:', error);
+      logger.error('Failed to cancel scheduled notification', { error });
       return false;
     }
   },
@@ -482,7 +483,7 @@ The MentorMinds Team
 
       return true;
     } catch (error) {
-      console.error('Failed to retry notification:', error);
+      logger.error('Failed to retry notification', { error });
       return false;
     }
   },
@@ -667,7 +668,7 @@ The MentorMinds Team
     try {
       return await NotificationsModel.deleteExpired();
     } catch (error) {
-      console.error('Failed to cleanup expired notifications:', error);
+      logger.error('Failed to cleanup expired notifications', { error });
       return 0;
     }
   },
@@ -683,7 +684,7 @@ The MentorMinds Team
     try {
       return await NotificationDeliveryTrackingModel.getDeliveryStats(startDate, endDate, channel);
     } catch (error) {
-      console.error('Failed to get delivery statistics:', error);
+      logger.error('Failed to get delivery statistics', { error });
       return [];
     }
   },
@@ -695,7 +696,7 @@ The MentorMinds Team
     try {
       return await NotificationDeliveryTrackingModel.getFailedDeliveries(limit, olderThan);
     } catch (error) {
-      console.error('Failed to get failed notifications for retry:', error);
+      logger.error('Failed to get failed notifications for retry', { error });
       return [];
     }
   },

@@ -2,6 +2,7 @@ import nodemailer, { Transporter, SendMailOptions } from 'nodemailer';
 import config from '../config';
 import { NotificationTemplatesModel } from '../models/notification-templates.model';
 import { NotificationDeliveryTrackingModel, DeliveryStatus } from '../models/notification-delivery-tracking.model';
+import { logger } from '../utils/logger';
 
 export interface EmailRequest {
   to: string[];
@@ -112,7 +113,7 @@ export class EmailService {
       });
     }
 
-    console.log(`📧 Email service initialized with ${this.providers.length} provider(s)`);
+    logger.info(`Email service initialized with ${this.providers.length} provider(s)`);
   }
 
   /**
@@ -216,7 +217,7 @@ export class EmailService {
         });
       }
 
-      console.log(`📧 Email sent successfully via ${provider.name}:`, {
+      logger.info(`Email sent successfully via ${provider.name}`, {
         messageId: info.messageId,
         to: request.to,
         subject: request.subject,
@@ -245,7 +246,7 @@ export class EmailService {
         });
       }
 
-      console.error(`📧 Email failed via ${provider.name}:`, errorMessage);
+      logger.error(`Email failed via ${provider.name}`, { error: errorMessage });
 
       return {
         success: false,
@@ -283,7 +284,7 @@ export class EmailService {
 
       return { subject, html, text };
     } catch (error) {
-      console.error('Failed to render email template:', error);
+      logger.error('Failed to render email template', { error });
       
       // Return fallback template
       return {
@@ -311,7 +312,7 @@ export class EmailService {
       );
 
       if (missingVariables.length > 0) {
-        console.warn(`Template ${templateId} missing variables:`, missingVariables);
+        logger.warn(`Template ${templateId} missing variables`, { missingVariables });
         return false;
       }
 
@@ -319,7 +320,7 @@ export class EmailService {
       await this.renderTemplate(templateId, sampleData);
       return true;
     } catch (error) {
-      console.error(`Template validation failed for ${templateId}:`, error);
+      logger.error(`Template validation failed for ${templateId}`, { error });
       return false;
     }
   }
@@ -357,7 +358,7 @@ export class EmailService {
         provider.isHealthy = true;
         provider.lastError = undefined;
         provider.lastErrorTime = undefined;
-        console.log(`📧 Provider ${provider.name} circuit breaker reset`);
+        logger.info(`Provider ${provider.name} circuit breaker reset`);
         return true;
       }
     }
@@ -373,7 +374,7 @@ export class EmailService {
     provider.lastErrorTime = new Date();
     provider.isHealthy = false;
     
-    console.warn(`📧 Provider ${provider.name} marked as unhealthy:`, error);
+    logger.warn(`Provider ${provider.name} marked as unhealthy`, { error });
   }
 
   /**

@@ -1,6 +1,7 @@
 import { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import Redis from 'ioredis';
 import config from '../config';
+import { logger } from './logger';
 
 const redisConfig = config.redis ? { url: config.redis.url } : { host: '127.0.0.1', port: 6379 };
 // Use configuration URL if present, else default
@@ -27,7 +28,7 @@ export class QueryMonitor {
       const res = await client.query(explainQuery, params);
       return res.rows[0];
     } catch (error) {
-      console.error(`[Query Monitor] Failed to explain query: ${error}`);
+      logger.error(`[Query Monitor] Failed to explain query: ${error}`);
       return null;
     }
   }
@@ -64,7 +65,7 @@ export class QueryMonitor {
 
     if (preventNPlusOne) {
        // A log indicating this query leverages batched execution (e.g., via DataLoader).
-       console.debug(`[Query Monitor] Batch execution preventing N+1 for query: ${text.substring(0, 40)}...`);
+       logger.debug(`[Query Monitor] Batch execution preventing N+1 for query: ${text.substring(0, 40)}...`);
     }
 
     const start = process.hrtime();
@@ -82,11 +83,11 @@ export class QueryMonitor {
 
       // Analyze slow queries
       if (durationMs > this.SLOW_QUERY_THRESHOLD_MS) {
-        console.warn(`[SLOW QUERY] ${text} - Took ${durationMs.toFixed(2)}ms`);
+        logger.warn(`[SLOW QUERY] ${text} - Took ${durationMs.toFixed(2)}ms`);
         // Auto-run explain plan analysis on slow queries
         const plan = await this.explainQuery(client, text, params);
         if (plan) {
-            console.warn(`[QUERY EXPLAIN PLAN] For slow query:`, JSON.stringify(plan, null, 2));
+            logger.warn(`[QUERY EXPLAIN PLAN] For slow query:`, JSON.stringify(plan, null, 2));
         }
       }
 
@@ -97,7 +98,7 @@ export class QueryMonitor {
 
       return res;
     } catch (error) {
-      console.error(`[QUERY ERROR] Failed execution for ${text}:`, error);
+      logger.error(`[QUERY ERROR] Failed execution for ${text}:`, error);
       throw error;
     }
   }
