@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { MentorsController } from '../controllers/mentors.controller';
 import { VerificationController } from '../controllers/verification.controller';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireOwnerOrAdmin, requireRole } from '../middleware/rbac.middleware';
+import { requireOwnerOrAdmin } from '../middleware/rbac.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../utils/asyncHandler.utils';
 import {

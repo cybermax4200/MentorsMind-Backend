@@ -2,9 +2,9 @@
 import config from './config';
 import app from './app';
 import { initializeModels } from './models';
-import { initWebSocketServer } from './websocket/ws-server';
-import { QueryMonitor } from './utils/query-monitor.utils';
-import pool from './config/database';
+import { createSocketServer } from './config/socket';
+import { initializeSocketService } from './services/socket.service';
+import { startStellarStream, stopStellarStream } from './services/stellar-stream.service';
 import {
   emailWorker,
   paymentWorker,
@@ -15,6 +15,7 @@ import {
   stopScheduler,
 } from './workers';
 import { initializeEmailTemplates } from './services/template-initializer.service';
+import { logger } from './utils/logger.utils';
 
 // Initialize database tables, then seed email templates
 initializeModels()
