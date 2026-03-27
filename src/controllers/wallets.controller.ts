@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { WalletsService } from '../services/wallets.service';

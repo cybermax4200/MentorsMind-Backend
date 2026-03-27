@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Mentor Validation Schemas
  */

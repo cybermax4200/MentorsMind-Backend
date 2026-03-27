@@ -19,7 +19,7 @@ export const AuthController = {
             return res.status(201).json({ success: true, data: result });
         } catch (error: any) {
             if (error instanceof ZodError) {
-                return res.status(400).json({ success: false, error: 'Validation failed', details: error.errors });
+                return res.status(400).json({ success: false, error: 'Validation failed', details: error.issues });
             }
             return res.status(400).json({ success: false, error: error.message });
         }
@@ -32,7 +32,7 @@ export const AuthController = {
             return res.status(200).json({ success: true, data: result });
         } catch (error: any) {
             if (error instanceof ZodError) {
-                return res.status(400).json({ success: false, error: 'Validation failed', details: error.errors });
+                return res.status(400).json({ success: false, error: 'Validation failed', details: error.issues });
             }
             if (error.message.includes('Invalid email or password')) {
                 return res.status(401).json({ success: false, error: error.message });
@@ -60,7 +60,7 @@ export const AuthController = {
             return res.status(200).json({ success: true, data: result });
         } catch (error: any) {
             if (error instanceof ZodError) {
-                return res.status(400).json({ success: false, error: 'Validation failed', details: error.errors });
+                return res.status(400).json({ success: false, error: 'Validation failed', details: error.issues });
             }
             return res.status(401).json({ success: false, error: error.message });
         }
@@ -79,7 +79,7 @@ export const AuthController = {
             });
         } catch (error: any) {
             if (error instanceof ZodError) {
-                return res.status(400).json({ success: false, error: 'Validation failed', details: error.errors });
+                return res.status(400).json({ success: false, error: 'Validation failed', details: error.issues });
             }
             return res.status(400).json({ success: false, error: error.message });
         }
@@ -92,7 +92,7 @@ export const AuthController = {
             return res.status(200).json({ success: true, message: 'Password reset successfully. You can now login with your new password.' });
         } catch (error: any) {
             if (error instanceof ZodError) {
-                return res.status(400).json({ success: false, error: 'Validation failed', details: error.errors });
+                return res.status(400).json({ success: false, error: 'Validation failed', details: error.issues });
             }
             return res.status(400).json({ success: false, error: error.message });
         }

@@ -97,7 +97,11 @@ let redisHealthClient: any = null;
 
 async function getRedisHealthClient() {
   if (redisHealthClient) return redisHealthClient;
-  
+
+  if (!redisConfig.url) {
+    return null;
+  }
+
   try {
     const Redis = (await import('ioredis')).default;
     redisHealthClient = new Redis(redisConfig.url, redisConfig.options);
