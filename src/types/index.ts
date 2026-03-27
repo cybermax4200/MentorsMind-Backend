@@ -4,10 +4,13 @@
  */
 
 // API types
-export * from './api.types';
+export * from "./api.types";
 
 // Stellar types
-export * from './stellar.types';
+export * from "./stellar.types";
 
 // Wallet types
-export * from './wallet.types';
+export * from "./wallet.types";
+
+// Upload types
+export * from "./upload.types";

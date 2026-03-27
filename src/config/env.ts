@@ -103,6 +103,15 @@ const envSchema = z.object({
 
   // Platform
   PLATFORM_FEE_PERCENTAGE: z.string().regex(/^\d+$/).default("5"),
+
+  // File Upload / Storage
+  STORAGE_BACKEND: z.enum(["local", "s3"]).default("local"),
+  LOCAL_UPLOAD_DIR: z.string().default("./uploads"),
+  CDN_BASE_URL: z.string().default("http://localhost:5000/uploads"),
+  AWS_REGION: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_BUCKET_NAME: z.string().optional(),
 });
 
 function validateEnv() {
