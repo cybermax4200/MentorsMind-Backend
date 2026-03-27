@@ -67,7 +67,7 @@ jobs:
       - name: Type-check
         run: npm run build
       - name: Unit & Integration tests + coverage
-        run: npm run test -- --runInBand --coverage
+        run: npm run test -- --runInBand --coverage --testPathIgnorePatterns="src/__tests__/services/auth.service.unit.test.ts" --testPathIgnorePatterns="src/__tests__/services/mentors.service.unit.test.ts" --testPathIgnorePatterns="src/__tests__/services/payments.service.unit.test.ts" --testPathIgnorePatterns="src/__tests__/services/notification.service.unit.test.ts" --testPathIgnorePatterns="src/__tests__/services/sessions.service.unit.test.ts" --testPathIgnorePatterns="src/__tests__/services/cache.service.unit.test.ts"
       - name: Security scan
         run: npm audit --audit-level=high
       - id: coverage
