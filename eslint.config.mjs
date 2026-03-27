@@ -28,11 +28,13 @@ export default tseslint.config(
       'jest.config.ts',
       'jest.ws.config.ts',
       'jest.unit.config.ts',
+      'jest.contract.config.ts',
       '**/*.test.ts',
       'src/**/__tests__/**',
       'eslint.config.mjs',
       'database/**',
       'load-tests/**',
+      'scripts/**',
     ],
   }
 );
