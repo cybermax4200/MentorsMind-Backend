@@ -1,187 +1,250 @@
 // @ts-nocheck
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import pool from '../config/database';
-import { RegisterInput, LoginInput, ResetPasswordInput } from '../validators/auth.validator';
-import { UserRecord } from './users.service';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import pool from "../config/database";
+import {
+  RegisterInput,
+  LoginInput,
+  ResetPasswordInput,
+} from "../validators/auth.validator";
+import { UserRecord } from "./users.service";
+import { EmailVerificationService } from "./email-verification.service";
+import { EmailNotVerifiedError } from "../errors/email-verification.errors";
+import { AuditLoggerService } from "./audit-logger.service";
+import { LogLevel } from "../utils/log-formatter.utils";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret';
-const ACCESS_TOKEN_EXPIRED_IN = '15m';
-const REFRESH_TOKEN_EXPIRED_IN = '7d';
+const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
+const JWT_REFRESH_SECRET =
+  process.env.JWT_REFRESH_SECRET || "fallback_refresh_secret";
+const ACCESS_TOKEN_EXPIRED_IN = "15m";
+const REFRESH_TOKEN_EXPIRED_IN = "7d";
 
 export interface AuthTokens {
-    accessToken: string;
-    refreshToken: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface AuthUserRecord extends UserRecord {
-    password_hash: string;
-    refresh_token: string | null;
-    reset_token: string | null;
-    reset_token_expires: Date | null;
+  password_hash: string;
+  refresh_token: string | null;
+  reset_token: string | null;
+  reset_token_expires: Date | null;
 }
 
 export const AuthService = {
-    /**
-     * Register a new user
-     */
-    async register(input: RegisterInput): Promise<AuthTokens & { userId: string }> {
-        const { email, password, firstName, lastName, role } = input;
+  /**
+   * Register a new user
+   */
+  async register(
+    input: RegisterInput,
+  ): Promise<AuthTokens & { userId: string }> {
+    const { email, password, firstName, lastName, role } = input;
 
-        // Check if email already exists
-        const checkQuery = `SELECT id FROM users WHERE email = $1`;
-        const checkResult = await pool.query(checkQuery, [email]);
-        if (checkResult.rows.length > 0) {
-            throw new Error('Email is already registered.');
-        }
+    // Check if email already exists
+    const checkQuery = `SELECT id FROM users WHERE email = $1`;
+    const checkResult = await pool.query(checkQuery, [email]);
+    if (checkResult.rows.length > 0) {
+      throw new Error("Email is already registered.");
+    }
 
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
 
-        const insertQuery = `
+    const insertQuery = `
       INSERT INTO users (email, password_hash, first_name, last_name, role)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, role
     `;
-        const { rows } = await pool.query(insertQuery, [email, passwordHash, firstName, lastName, role]);
-        const user = rows[0];
+    const { rows } = await pool.query(insertQuery, [
+      email,
+      passwordHash,
+      firstName,
+      lastName,
+      role,
+    ]);
+    const user = rows[0];
 
-        const tokens = await this.generateTokens(user.id, user.role);
-        return { ...tokens, userId: user.id };
-    },
+    const tokens = await this.generateTokens(user.id, user.role);
 
-    /**
-     * Login an existing user
-     */
-    async login(input: LoginInput): Promise<{ tokens: AuthTokens; userId: string; role: string }> {
-        const { email, password } = input;
+    // Send verification email; failure must not block registration
+    try {
+      await EmailVerificationService.sendVerificationEmail(
+        user.id,
+        email,
+        firstName,
+      );
+    } catch {
+      await AuditLoggerService.logEvent({
+        level: LogLevel.WARN,
+        action: "VERIFICATION_EMAIL_SEND_FAILED",
+        message: `Failed to send verification email for user ${user.id}`,
+        userId: user.id,
+        entityType: "user",
+        entityId: user.id,
+      });
+    }
 
-        const query = `
-      SELECT id, role, password_hash 
+    return { ...tokens, userId: user.id };
+  },
+
+  /**
+   * Login an existing user
+   */
+  async login(
+    input: LoginInput,
+  ): Promise<{ tokens: AuthTokens; userId: string; role: string }> {
+    const { email, password } = input;
+
+    const query = `
+      SELECT id, role, password_hash, email_verified
       FROM users 
       WHERE email = $1 AND is_active = true
     `;
-        const { rows } = await pool.query(query, [email]);
+    const { rows } = await pool.query(query, [email]);
 
-        if (rows.length === 0) {
-            throw new Error('Invalid email or password.');
-        }
+    if (rows.length === 0) {
+      throw new Error("Invalid email or password.");
+    }
 
-        const user = rows[0];
-        const isMatch = await bcrypt.compare(password, user.password_hash);
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(password, user.password_hash);
 
-        if (!isMatch) {
-            throw new Error('Invalid email or password.');
-        }
+    if (!isMatch) {
+      throw new Error("Invalid email or password.");
+    }
 
-        const tokens = await this.generateTokens(user.id, user.role);
-        return { tokens, userId: user.id, role: user.role };
-    },
+    // Gate login on email verification if the feature flag is enabled
+    if (
+      process.env.REQUIRE_EMAIL_VERIFICATION === "true" &&
+      user.email_verified === false
+    ) {
+      await AuditLoggerService.logEvent({
+        level: LogLevel.WARN,
+        action: "LOGIN_BLOCKED_UNVERIFIED",
+        message: `Login blocked for unverified user ${user.id}`,
+        userId: user.id,
+        entityType: "user",
+        entityId: user.id,
+      });
+      throw new EmailNotVerifiedError();
+    }
 
-    /**
-     * Refresh the access and refresh tokens
-     */
-    async refresh(refreshToken: string): Promise<AuthTokens> {
-        try {
-            const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as { sub: string; role: string };
-            const userId = decoded.sub;
+    const tokens = await this.generateTokens(user.id, user.role);
+    return { tokens, userId: user.id, role: user.role };
+  },
 
-            // Ensure the token matches what is in DB (token rotation logic)
-            const query = `SELECT refresh_token, role FROM users WHERE id = $1 AND is_active = true`;
-            const { rows } = await pool.query(query, [userId]);
+  /**
+   * Refresh the access and refresh tokens
+   */
+  async refresh(refreshToken: string): Promise<AuthTokens> {
+    try {
+      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as {
+        sub: string;
+        role: string;
+      };
+      const userId = decoded.sub;
 
-            if (rows.length === 0 || rows[0].refresh_token !== refreshToken) {
-                // Token reuse detected or invalid user
-                throw new Error('Invalid refresh token.');
-            }
+      // Ensure the token matches what is in DB (token rotation logic)
+      const query = `SELECT refresh_token, role FROM users WHERE id = $1 AND is_active = true`;
+      const { rows } = await pool.query(query, [userId]);
 
-            return this.generateTokens(userId, rows[0].role);
-        } catch {
-            throw new Error('Invalid or expired refresh token.');
-        }
-    },
+      if (rows.length === 0 || rows[0].refresh_token !== refreshToken) {
+        // Token reuse detected or invalid user
+        throw new Error("Invalid refresh token.");
+      }
 
-    /**
-     * Logout user by clearing their refresh token
-     */
-    async logout(userId: string): Promise<void> {
-        const query = `UPDATE users SET refresh_token = NULL WHERE id = $1`;
-        await pool.query(query, [userId]);
-    },
+      return this.generateTokens(userId, rows[0].role);
+    } catch {
+      throw new Error("Invalid or expired refresh token.");
+    }
+  },
 
-    /**
-     * Handle forgot password
-     */
-    async forgotPassword(email: string): Promise<string> {
-        const query = `SELECT id FROM users WHERE email = $1 AND is_active = true`;
-        const { rows } = await pool.query(query, [email]);
+  /**
+   * Logout user by clearing their refresh token
+   */
+  async logout(userId: string): Promise<void> {
+    const query = `UPDATE users SET refresh_token = NULL WHERE id = $1`;
+    await pool.query(query, [userId]);
+  },
 
-        if (rows.length === 0) {
-            // Don't reveal if user exists or not, just return early
-            return '';
-        }
+  /**
+   * Handle forgot password
+   */
+  async forgotPassword(email: string): Promise<string> {
+    const query = `SELECT id FROM users WHERE email = $1 AND is_active = true`;
+    const { rows } = await pool.query(query, [email]);
 
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-        const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    if (rows.length === 0) {
+      // Don't reveal if user exists or not, just return early
+      return "";
+    }
 
-        await pool.query(
-            `UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3`,
-            [resetTokenHash, expires, rows[0].id]
-        );
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenHash = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
-        // Normally we would send an email here
-        return resetToken;
-    },
+    await pool.query(
+      `UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3`,
+      [resetTokenHash, expires, rows[0].id],
+    );
 
-    /**
-     * Reset password via token
-     */
-    async resetPassword(input: ResetPasswordInput): Promise<string> {
-        const resetTokenHash = crypto.createHash('sha256').update(input.token).digest('hex');
+    // Normally we would send an email here
+    return resetToken;
+  },
 
-        const query = `
+  /**
+   * Reset password via token
+   */
+  async resetPassword(input: ResetPasswordInput): Promise<string> {
+    const resetTokenHash = crypto
+      .createHash("sha256")
+      .update(input.token)
+      .digest("hex");
+
+    const query = `
       SELECT id FROM users 
       WHERE reset_token = $1 AND reset_token_expires > NOW() AND is_active = true
     `;
-        const { rows } = await pool.query(query, [resetTokenHash]);
+    const { rows } = await pool.query(query, [resetTokenHash]);
 
-        if (rows.length === 0) {
-            throw new Error('Invalid or expired reset token.');
-        }
-
-        const userId = rows[0].id;
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(input.newPassword, salt);
-
-        await pool.query(
-            `UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
-            [passwordHash, userId]
-        );
-        
-        return userId;
-    },
-
-    /**
-     * Generate access and refresh tokens, and save refresh token to DB
-     */
-    async generateTokens(userId: string, role: string): Promise<AuthTokens> {
-        const accessToken = jwt.sign({ sub: userId, role }, JWT_SECRET, {
-            expiresIn: ACCESS_TOKEN_EXPIRED_IN,
-        });
-
-        const refreshToken = jwt.sign({ sub: userId, role }, JWT_REFRESH_SECRET, {
-            expiresIn: REFRESH_TOKEN_EXPIRED_IN,
-        });
-
-        // Save refresh token to DB (basic token rotation implementation)
-        await pool.query(
-            `UPDATE users SET refresh_token = $1 WHERE id = $2`,
-            [refreshToken, userId]
-        );
-
-        return { accessToken, refreshToken };
+    if (rows.length === 0) {
+      throw new Error("Invalid or expired reset token.");
     }
+
+    const userId = rows[0].id;
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(input.newPassword, salt);
+
+    await pool.query(
+      `UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
+      [passwordHash, userId],
+    );
+
+    return userId;
+  },
+
+  /**
+   * Generate access and refresh tokens, and save refresh token to DB
+   */
+  async generateTokens(userId: string, role: string): Promise<AuthTokens> {
+    const accessToken = jwt.sign({ sub: userId, role }, JWT_SECRET, {
+      expiresIn: ACCESS_TOKEN_EXPIRED_IN,
+    });
+
+    const refreshToken = jwt.sign({ sub: userId, role }, JWT_REFRESH_SECRET, {
+      expiresIn: REFRESH_TOKEN_EXPIRED_IN,
+    });
+
+    // Save refresh token to DB (basic token rotation implementation)
+    await pool.query(`UPDATE users SET refresh_token = $1 WHERE id = $2`, [
+      refreshToken,
+      userId,
+    ]);
+
+    return { accessToken, refreshToken };
+  },
 };

@@ -1,6 +1,13 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { UsersService } from "../services/users.service";
+import { EmailVerificationService } from "../services/email-verification.service";
+import {
+  TokenExpiredError,
+  InvalidTokenError,
+  AlreadyVerifiedError,
+} from "../errors/email-verification.errors";
 import {
   registerSchema,
   loginSchema,
@@ -14,6 +21,12 @@ import {
   AuditLogService,
   extractIpAddress,
 } from "../services/auditLog.service";
+
+const resendVerificationSchema = z.object({
+  body: z.object({
+    email: z.string().email("Invalid email address"),
+  }),
+});
 
 export const AuthController = {
   async register(req: Request, res: Response) {
@@ -34,13 +47,11 @@ export const AuthController = {
       return res.status(201).json({ success: true, data: result });
     } catch (error: any) {
       if (error instanceof ZodError) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "Validation failed",
-            details: error.issues,
-          });
+        return res.status(400).json({
+          success: false,
+          error: "Validation failed",
+          details: error.issues,
+        });
       }
       return res.status(400).json({ success: false, error: error.message });
     }
@@ -79,13 +90,11 @@ export const AuthController = {
       }
 
       if (error instanceof ZodError) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "Validation failed",
-            details: error.issues,
-          });
+        return res.status(400).json({
+          success: false,
+          error: "Validation failed",
+          details: error.issues,
+        });
       }
       if (error.message.includes("Invalid email or password")) {
         return res.status(401).json({ success: false, error: error.message });
@@ -124,13 +133,11 @@ export const AuthController = {
       return res.status(200).json({ success: true, data: result });
     } catch (error: any) {
       if (error instanceof ZodError) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "Validation failed",
-            details: error.issues,
-          });
+        return res.status(400).json({
+          success: false,
+          error: "Validation failed",
+          details: error.issues,
+        });
       }
       return res.status(401).json({ success: false, error: error.message });
     }
@@ -147,13 +154,11 @@ export const AuthController = {
       });
     } catch (error: any) {
       if (error instanceof ZodError) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "Validation failed",
-            details: error.issues,
-          });
+        return res.status(400).json({
+          success: false,
+          error: "Validation failed",
+          details: error.issues,
+        });
       }
       return res.status(400).json({ success: false, error: error.message });
     }
@@ -176,22 +181,18 @@ export const AuthController = {
         });
       }
 
-      return res
-        .status(200)
-        .json({
-          success: true,
-          message:
-            "Password reset successfully. You can now login with your new password.",
-        });
+      return res.status(200).json({
+        success: true,
+        message:
+          "Password reset successfully. You can now login with your new password.",
+      });
     } catch (error: any) {
       if (error instanceof ZodError) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "Validation failed",
-            details: error.issues,
-          });
+        return res.status(400).json({
+          success: false,
+          error: "Validation failed",
+          details: error.issues,
+        });
       }
       return res.status(400).json({ success: false, error: error.message });
     }
@@ -214,6 +215,92 @@ export const AuthController = {
       return res.status(200).json({ success: true, data: user });
     } catch (error: any) {
       return res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  async verifyEmail(req: Request, res: Response) {
+    const token = req.query.token;
+
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "MISSING_TOKEN",
+        message: "Verification token is missing",
+      });
+    }
+
+    try {
+      const result = await EmailVerificationService.verifyToken(token);
+
+      if (result.alreadyVerified) {
+        return res.status(200).json({
+          success: true,
+          message: "Email is already verified",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Email verified successfully",
+      });
+    } catch (error: any) {
+      if (error instanceof TokenExpiredError) {
+        return res.status(400).json({
+          success: false,
+          error: "TOKEN_EXPIRED",
+          message: error.message,
+        });
+      }
+      if (error instanceof InvalidTokenError) {
+        return res.status(400).json({
+          success: false,
+          error: "INVALID_TOKEN",
+          message: error.message,
+        });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async resendVerification(req: Request, res: Response) {
+    let email: string;
+
+    try {
+      const validated = resendVerificationSchema.parse(req);
+      email = validated.body.email;
+    } catch (error: any) {
+      if (error instanceof ZodError) {
+        return res.status(422).json({
+          success: false,
+          error: "Validation failed",
+          details: error.issues,
+        });
+      }
+      return res
+        .status(422)
+        .json({ success: false, error: "Invalid request body" });
+    }
+
+    try {
+      await EmailVerificationService.resendVerificationEmail(email);
+      return res.status(200).json({
+        success: true,
+        message:
+          "If that email exists and is unverified, a new verification email has been sent.",
+      });
+    } catch (error: any) {
+      if (error instanceof AlreadyVerifiedError) {
+        return res.status(400).json({
+          success: false,
+          error: "ALREADY_VERIFIED",
+          message: error.message,
+        });
+      }
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
     }
   },
 };

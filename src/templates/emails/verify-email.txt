@@ -1,0 +1,15 @@
+MENTORMINDS - Verify Your Email Address
+
+Hi {{firstName}},
+
+Thanks for signing up! Please verify your email address to activate your MentorMinds account.
+
+Verify your email by visiting the link below:
+{{verificationUrl}}
+
+This verification link expires in {{expiryHours}} hours. If it expires, you can request a new one from the login page.
+
+If you didn't create a MentorMinds account, you can safely ignore this email.
+
+Best regards,
+The MentorMinds Team
